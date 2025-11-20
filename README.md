@@ -2,6 +2,10 @@
 
 TCGA-BRCA RNA-seq analysis pipeline for the **Bioinformatics** course project.
 
+Team Members:
+Akhilesh Arunkumar Kumbhar (1002248929)
+Hritik Vivek Patil (1002244075)
+
 The goal of this project is to:
 
 1. Download gene-level RNA-seq counts for **TCGA-BRCA** from the NCI Genomic Data Commons (GDC).
