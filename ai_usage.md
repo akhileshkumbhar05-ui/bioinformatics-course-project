@@ -1,7 +1,6 @@
 # AI Usage Documentation
 
-This file describes **how AI (ChatGPT)** was used in this repository, with a focus on the
-**data collection / matrix construction code** for the TCGA-BRCA RNA-seq project, and how we
+This file describes **how AI (ChatGPT)** was used in this repository, and how we
 verified any AI-generated outputs.
 
 ---
