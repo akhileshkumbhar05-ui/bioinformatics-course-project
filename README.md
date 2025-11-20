@@ -1,4 +1,4 @@
-# bioinformatics-course-project
+# Tumor–Normal Differential Expression, Pathways, and ML Classifier (TCGA-BRCA)
 
 TCGA-BRCA RNA-seq analysis pipeline for the **Bioinformatics** course project.
 
