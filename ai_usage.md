@@ -1,178 +1,165 @@
 # AI Usage Documentation
 
-This file describes **how AI (ChatGPT)** was used in this repository, and how we
-verified any AI-generated outputs.
+This file documents how AI tools were used in this project, how their outputs were verified, and any relevant ethical or data-privacy considerations.
 
 ---
 
 ## 1. AI tools used
 
-- **ChatGPT (OpenAI, GPT-5.1-class model)**  
-  Used via the ChatGPT web interface while developing the project.
+- **ChatGPT (OpenAI)** – used as a conversational assistant for:
+  - Designing the analysis pipeline.
+  - Writing and refactoring Python code for the notebook and script.
+  - Debugging errors and suggesting fixes.
+  - Polishing written text (report sections, README, and this file).
+  - Generating short figure-caption style summaries of results.
 
-No other code-generation tools (e.g., GitHub Copilot, CodeWhisperer) were used for this
-repository.
-
----
-
-## 2. Where AI was used in the data collection pipeline
-
-AI was used as a *coding assistant* and *editor*, not as an autonomous agent. The main
-places it contributed are:
-
-### 2.1. GDC API query and metadata construction
-
-- Helped draft the initial Python code to:
-  - Call the GDC **`/files`** endpoint with a JSON filter for:
-    - `project_id = "TCGA-BRCA"`
-    - data category = `Transcriptome Profiling`
-    - data type = `Gene Expression Quantification`
-    - workflow type = `STAR - Counts`
-    - access = `open`
-  - Request expansion of `cases.samples` and `cases.demographic`.
-  - Convert the JSON response into a `pandas.DataFrame`.
-
-- We **manually edited** this code to:
-  - Clean up column names and select only the fields we actually need.
-  - Restrict to `Primary Tumor` and `Solid Tissue Normal` sample types.
-  - Add `MAX_FILES` logic to down-sample for Colab memory limits.
-
-### 2.2. Chunked download of STAR counts
-
-- ChatGPT suggested the pattern of:
-  - Grouping file IDs into batches (size 20).
-  - Sending POST requests to the GDC **`/data`** endpoint.
-  - Streaming responses to `.tar.gz` archives and extracting them.
-
-- We modified the generated code to:
-  - Add progress printing and basic error handling.
-  - Clean up temporary archives after extraction.
-  - Choose directory names and constants that match our repo.
-
-### 2.3. Robust STAR counts reader
-
-- ChatGPT helped design the `read_star_counts_file()` helper function that:
-  - Tries to read both GDC `gene_counts.tsv` and STAR `ReadsPerGene.out.tab` formats.
-  - Removes non-gene summary rows.
-  - Strips Ensembl version suffixes (e.g., `ENSG000001234.1` → `ENSG000001234`).
-  - Returns a `pandas.Series` of counts indexed by `gene_id`.
-
-- We reviewed and edited this function to:
-  - Make the format checks more explicit.
-  - Ensure that only **unstranded** counts are used.
-  - Remove any leftover debug code and tighten up `try/except` blocks.
-
-### 2.4. Memory-safe count-matrix construction
-
-- ChatGPT proposed using:
-  - A loop over TSV files where each file is loaded into memory one at a time.
-  - A list of per-sample `Series` objects.
-  - A single `pd.concat(series_list, axis=1)` at the end.
-
-- We:
-  - Integrated this into `build_counts_matrix()`.
-  - Added explicit mapping from `file_name` → `sample_submitter_id`.
-  - Chose how to handle missing values (fill with zero, cast to `int`).
-  - Decided which genes to optionally drop (e.g., pseudo-genes with `"PAR_Y"`).
-
-### 2.5. Documentation and README text
-
-- ChatGPT helped draft:
-  - The initial version of `README.md`.
-  - This `ai_usage.md` file.
-  - Status-report text describing the data-collection pipeline.
-
-- We edited all text for accuracy, course requirements, and clarity.
+No other code-completion or AI writing tools were used on this repository.
 
 ---
 
-## 3. What was done **without** AI
+## 2. Where AI contributed
 
-The following choices and implementations were made by us, not suggested by AI:
+### 2.1 Project design and planning
 
-- Deciding to focus on **TCGA-BRCA** and on **STAR – Counts** rather than raw FASTQ data.
-- Choosing which sample types to include (`Primary Tumor`, `Solid Tissue Normal`) and how
-  to down-sample to 80 samples for prototyping.
-- All decisions about **project goals**, especially:
-  - Tumor vs normal DE analysis.
-  - Pathway analysis with Hallmark gene sets.
-  - Building an interpretable logistic-regression classifier.
-- The specific directory structure and naming conventions for files in the repo.
-- The overall organization of the notebook and high-level analysis plan.
+ChatGPT was used to help sketch an analysis plan consistent with the course template:
+
+- Use TCGA-BRCA STAR-Counts data from the GDC.
+- Build a gene × sample count matrix and metadata table.
+- Perform differential expression with **PyDESeq2**.
+- Perform pathway analysis with **GSEApy** and Hallmark gene sets.
+- Compute single-sample pathway scores (ssGSEA).
+- Train logistic regression and random forest classifiers with stratified 5-fold CV.
+- Produce the specific visualizations requested in the assignment (QC plots, MA/volcano, pathway tables, ROC/confusion matrices, heatmaps).
+
+These plans were then implemented and adjusted based on what actually worked in the notebook.
+
+### 2.2 Code scaffolding and refactoring
+
+ChatGPT assisted in writing and/or refactoring code for the following parts of `Bioinformatics_Course_Project.ipynb` / `bioinformatics_course_project.py`:
+
+- **GDC data access**
+  - Building the GDC Files API query for TCGA-BRCA STAR-Counts.
+  - Chunked download and extraction of TSV gene-level count files.
+  - Logging and sanity checks (e.g., number of files, sample types).
+
+- **Counts matrix and metadata**
+  - Functions to:
+    - Parse STAR count TSVs.
+    - Strip Ensembl version suffixes.
+    - Drop non-gene rows.
+    - Merge counts into a unified gene × sample matrix.
+  - Construction of the sample metadata table from the GDC manifest / API response.
+
+- **QC and filtering**
+  - Computation of library sizes and plotting:
+    - Histogram of total counts per sample.
+    - Boxplot of log10 library size by condition.
+  - Simple low-count filtering rule (`MIN_COUNT`, `MIN_SAMPLES`) and saving the filtered matrix.
+
+- **Differential expression (PyDESeq2)**
+  - Setting up the PyDESeq2 dataset with design `~ condition`.
+  - Running DESeq2, collecting results, and saving them to CSV.
+  - Generating MA and volcano plots from the DE table.
+
+- **Gene-symbol mapping and Hallmark analysis**
+  - Using **MyGene.info** to map Ensembl IDs to gene symbols.
+  - Handling duplicates and building a symbol-indexed expression matrix.
+  - Using **GSEApy** to:
+    - Load MSigDB Hallmark gene sets.
+    - Run pre-ranked GSEA with a DE-based statistic.
+    - Run ssGSEA to get per-sample Hallmark scores.
+  - Extracting and sorting the top Hallmark pathways by FDR q-value.
+
+- **Machine-learning features and models**
+  - Building feature matrices:
+    - `X_genes` = top 100 DE genes.
+    - `X_pathways` = Hallmark ssGSEA scores.
+  - Implementing the cross-validated evaluation helper:
+    - StratifiedKFold.
+    - StandardScaler inside each fold.
+    - Logistic regression and random forest models.
+    - Computation of ROC-AUC, PR-AUC, accuracy, and F1.
+  - Saving per-fold metrics to CSV and summarizing mean metrics.
+  - Extracting top logistic-regression coefficients for genes and pathways.
+
+- **Final visualization summary cell**
+  - Single cell that re-generates all required plots at the end of the notebook:
+    - Library size histogram and boxplot.
+    - MA and volcano plots.
+    - Top Hallmark pathways table.
+    - ROC curves and confusion matrices.
+    - Heatmaps for top 25 genes and top 25 pathways.
+
+### 2.3 Writing and editing
+
+ChatGPT helped edit:
+
+- Parts of the **final report** (method descriptions, results summaries, figure-caption style sentences).
+- The **README.md** and **ai_usage.md** files.
+- Short interpretations of plots (one-sentence insights).
+
+All scientific claims were checked by reading the underlying results in the notebook.
 
 ---
 
-## 4. Verification of AI-generated code
+## 3. What was *not* delegated to AI
 
-All AI-assisted code was **manually verified** before being kept in the repository.
-
-Checks we performed:
-
-1. **Small-scale tests of the GDC query**
-   - Ran the API call on a small number of files.
-   - Confirmed that the response contained the expected fields (`project_id`,
-     `sample_type`, `case_id`, etc.).
-   - Printed `value_counts()` for `sample_type` to ensure tumor/normal labels looked
-     reasonable.
-
-2. **File download sanity checks**
-   - Verified that the number of downloaded TSV files matches the number of selected
-     metadata rows (or the intended `MAX_FILES` subset).
-   - Manually inspected a few TSVs to confirm they are valid STAR count files.
-
-3. **STAR counts parsing**
-   - For each branch in `read_star_counts_file()`:
-     - Tested it on example files of each format.
-     - Confirmed that:
-       - The `index` is a clean set of gene IDs without version suffixes.
-       - Summary rows (`N_unmapped`, etc.) are gone.
-       - Counts are integers and non-negative.
-   - Compared the number of genes reported by different files to ensure consistency.
-
-4. **Matrix alignment and shape checks**
-   - After running `build_counts_matrix()`:
-     - Checked that `tcga_brca_star_counts_matrix.csv` has one column per expected
-       sample and > 50k genes.
-     - Confirmed that the matrix columns exactly match the
-       `sample_submitter_id` values in `tcga_brca_star_metadata.csv`.
-     - Spot-checked a few genes across multiple samples for obviously wrong patterns
-       (e.g., all zeros).
-
-5. **Re-running in a fresh runtime**
-   - Cloned the repository into a new Colab environment.
-   - Ran the notebook from top to bottom.
-   - Confirmed that the same metadata and matrix files are produced without errors.
-
-If any AI-generated snippet behaved unexpectedly, we either **deleted it** or rewrote it
-manually.
+- AI was **not** used to fabricate data, p-values, or metrics.  
+  All numerical outputs (DE results, GSEA results, ML metrics) come from running the Python code on real TCGA-BRCA data.
+- AI was **not** used to upload or process any non-public data. Only open-access TCGA RNA-seq data obtained directly from the GDC were used.
+- Interpretation and final wording of conclusions were reviewed and adjusted by the student to ensure they matched the actual results.
 
 ---
 
-## 5. Ethical and privacy considerations
+## 4. How AI-generated outputs were verified
 
-- Only **open-access** TCGA-BRCA data from the GDC are used; no controlled-access or
-  dbGaP-protected files are downloaded.
-- The data contain no direct personal identifiers; analyses are carried out at the level
-  of cohort-level gene expression.
-- ChatGPT never received raw data files as uploads; only **code snippets, error
-  messages, and textual descriptions** of the data were shared.
-- Final responsibility for correctness, interpretation, and ethical use of all analyses
-  remains with the project team.
+The student verified AI-assisted code and text in several ways:
+
+1. **Execution and error checking**
+   - Every non-trivial block of AI-suggested code was pasted into the notebook and executed.
+   - Runtime errors and shape mismatches were fixed iteratively.
+   - If code could not be made to run correctly or produced nonsensical outputs, it was discarded.
+
+2. **Sanity checks on data shapes and counts**
+   - Confirmed that the number of samples and sample IDs matched between:
+     - Counts matrix, metadata, and label vectors.
+   - Checked that filtered gene counts decreased as expected after QC.
+   - Verified that ssGSEA feature matrices had reasonable dimensions (samples × pathways).
+
+3. **Consistency of statistical results**
+   - Inspected the DE result table:
+     - Reasonable number of significantly changed genes.
+     - Log2 fold changes with both up- and down-regulated genes.
+   - Examined GSEA results:
+     - Biologically plausible Hallmark pathways (e.g., E2F targets, estrogen response, MYC targets) at low FDR.
+   - Confirmed that ML metrics matched the printed confusion matrices and ROC curves.
+
+4. **Cross-validation behavior**
+   - Checked that each model was evaluated with stratified 5-fold CV.
+   - Confirmed that ROC-AUC, PR-AUC, accuracy, and F1 were in a consistent range across folds (not random or contradictory).
+
+5. **Text verification**
+   - Compared AI-drafted sentences with the actual figures and tables.
+   - Edited text where necessary so that it describes what the plots and tables *actually* show.
+
+Only code and explanations that passed these checks remain in the repository.
 
 ---
 
-## 6. Planned AI use for later stages
+## 5. Reproducibility notes
 
-For future stages (DESeq2, GSEA, and ML), we may use ChatGPT to:
+- All analysis steps are captured in the notebook and the Python script in this repository.
+- Random seeds (`random_state`) are set in key places (subsampling, cross-validation, random forest) to improve reproducibility.
+- The environment used for development was Google Colab with Python 3.9. Library versions may differ slightly in other environments, which can cause minor numeric differences but should not change the overall conclusions.
 
-- Suggest boilerplate code for standard analyses (e.g., DESeq2 setup, scikit-learn
-  cross-validation loops).
-- Help draft figure captions and report text.
+---
 
-For each such use, we will:
+## 6. Ethical and data-privacy considerations
 
-- Run and debug all code ourselves.
-- Sanity-check results (e.g., number of significant genes, behavior of well known
-  pathways).
-- Update this `ai_usage.md` file to reflect any additional AI involvement.
+- The project uses **public, de-identified** TCGA-BRCA RNA-seq STAR-Counts data from the NCI GDC.  
+  No protected health information (PHI) or controlled-access data were used.
+- No private datasets, patient records, or confidential information were uploaded to ChatGPT.
+- When citing literature, only short paraphrased text was generated; full copyrighted articles were not copied into the prompt or repository.
+- All usage of AI followed the course guidelines and is transparently documented in this file.
 
+---
